@@ -1,0 +1,44 @@
+# Workflow 2 de 3 — SEGURANÇA (prévia do Módulo 3, DevSecOps)
+# Separado da CI de propósito: objetivos diferentes, arquivos diferentes.
+name: Segurança
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  # Também roda toda segunda-feira às 6h UTC: dependências ficam
+  # vulneráveis com o tempo, mesmo sem ninguém tocar no código.
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  analise:
+    name: SAST e dependências
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v6
+
+      - name: Configurar Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Instalar ferramentas de segurança
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      # SAST: procura padrões inseguros no nosso próprio código.
+      - name: Analisar código (Bandit)
+        run: bandit -r src -f screen
+
+      # SCA: compara as dependências com bases de vulnerabilidades conhecidas.
+      - name: Auditar dependências (pip-audit)
+        run: pip-audit -r requirements.txt --strict
