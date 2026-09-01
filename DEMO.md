@@ -105,19 +105,72 @@ A esteira roda de novo e fica verde. O merge é liberado.
 
 ---
 
-## Ato 5 — Entrega contínua (2 min, opcional)
+## Ato 5 — Entrega contínua e promoção de artefato (3 min)
 
 Na aba Actions, dispare o **CD** manualmente (`Run workflow`).
 
-Mostre que:
+Mostre a cadeia dos três jobs:
 
-- o job `empacotar` roda sozinho e gera o artefato;
-- o job `publicar` fica **aguardando aprovação**;
-- o artefato pode ser baixado da própria execução.
+- `empacotar` roda sozinho, valida e gera o artefato;
+- `homologacao` promove automaticamente — sem aprovação;
+- `producao` fica **aguardando aprovação** (Review deployments).
+
+Abra o log de produção e mostre o `sha256sum`: é o **mesmo pacote** que passou
+por homologação, não uma reconstrução.
 
 > Aqui fica visível a diferença entre entrega e implantação contínua: a esteira
-> deixou tudo pronto, mas quem decide publicar é uma pessoa. Tirar essa
-> aprovação transforma entrega contínua em implantação contínua.
+> deixou tudo pronto, mas quem decide publicar é uma pessoa. Tirar o bloco
+> `environment` do job de produção transforma entrega em implantação contínua.
+
+---
+
+## Ato 6 — Secrets (2 min)
+
+Antes da aula, crie em **Settings → Secrets and variables → Actions** um segredo
+chamado `API_TOKEN` com qualquer valor (por exemplo `abc123xyz`).
+
+Abra o job **Secrets (demonstração)** da execução mais recente do CI. O log mostra
+o comprimento do token e, ao tentar imprimi-lo, exibe `***`.
+
+> Dois pontos: o segredo não está no código nem no YAML, e o GitHub mascara o
+> valor no log automaticamente. Mas cuidado — mascaramento não é criptografia:
+> quem tem permissão de editar workflows consegue exfiltrar segredos. Por isso
+> `permissions: contents: read` e revisão de mudanças em `.github/workflows`.
+
+---
+
+## Ato 7 — Feature flag: deploy não é release (3 min)
+
+No terminal, com o projeto local:
+
+```bash
+PYTHONPATH=src python -m cotacao USD-BRL
+# USD-BRL: R$ 5,42 (-0,42%)
+
+PYTHONPATH=src COTACAO_MOSTRAR_COMPRA=true python -m cotacao USD-BRL
+# USD-BRL: R$ 5,42 (-0,42%) | compra R$ 5,40
+```
+
+Mesmo código, mesmo artefato, comportamentos diferentes — sem novo deploy.
+
+> Amarre com o slide 26: a funcionalidade já está em produção, desligada. Ligar
+> vira decisão de produto, não de engenharia. É também o rollback mais rápido
+> que existe: desligar a flag não exige deploy nenhum.
+
+---
+
+## Ato 8 — Pinagem por SHA (2 min, opcional)
+
+Abra qualquer workflow e mostre a linha:
+
+```yaml
+uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+```
+
+> Pergunta para a turma: por que não simplesmente `@v7`? Porque tags são móveis.
+> Quem controla a action pode reapontar `v7` para código malicioso, e todos os
+> workflows do mundo que usam essa tag passam a executá-lo no próximo run. O SHA
+> é imutável. O comentário ao lado preserva a legibilidade da versão.
 
 ---
 

@@ -1,6 +1,7 @@
 """Testes das funções de formatação (não dependem de rede)."""
 
 import unittest
+from unittest.mock import patch
 
 from cotacao.formatter import formatar_brl, formatar_variacao, resumir
 
@@ -33,7 +34,9 @@ class TestFormatarVariacao(unittest.TestCase):
 class TestResumir(unittest.TestCase):
     def test_monta_linha_legivel(self):
         cotacao = {"par": "USD-BRL", "compra": 5.0, "venda": 5.42, "variacao": -0.42}
-        self.assertEqual(resumir(cotacao), "USD-BRL: R$ 5,42 (-0,42%)")
+        # Ambiente limpo: a feature flag de compra fica desligada.
+        with patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(resumir(cotacao), "USD-BRL: R$ 5,42 (-0,42%)")
 
 
 if __name__ == "__main__":

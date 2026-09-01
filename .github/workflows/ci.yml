@@ -13,45 +13,73 @@ on:
 permissions:
   contents: read
 
+# Cancela execuções antigas do mesmo branch quando chega um commit novo.
+# Evita fila de builds obsoletos — a esteira precisa ser rápida.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   qualidade:
     name: Lint e testes
     runs-on: ubuntu-latest
 
-    # Matriz: a mesma validação roda em três versões do Python.
+    # Matriz: a mesma validação roda em três versões do Python, em paralelo.
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.14"]
 
     steps:
-      # 1. Traz o código do repositório para dentro do runner.
+      # Actions de terceiros são fixadas por SHA de commit, não por tag.
+      # Tags são móveis: quem controla a action pode reapontar v7 para
+      # código malicioso. O SHA é imutável. O comentário registra a versão.
       - name: Checkout do código
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # 2. Instala a versão de Python desta linha da matriz.
       - name: Configurar Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      # 3. Ambiente limpo: dependências declaradas e instaladas automaticamente.
       - name: Instalar dependências
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
-      # 4. Análise estática: padrão de código e imports.
       - name: Analisar código (Ruff)
         run: ruff check --output-format=github .
 
-      # 5. Formatação: falha se algum arquivo não estiver formatado.
       - name: Conferir formatação (Ruff)
         run: ruff format --check .
 
-      # 6. Testes unitários — a espinha dorsal da integração contínua.
       - name: Rodar testes
         env:
           PYTHONPATH: src
         run: python -m unittest discover -s tests -v
+
+  # Job separado para demonstrar secrets sem poluir a matriz.
+  secrets-demo:
+    name: Secrets (demonstração)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # O segredo nunca aparece no YAML nem no código: vem de
+      # Settings > Secrets and variables > Actions.
+      # Se não estiver configurado, a variável fica vazia e o job segue.
+      - name: Usar um secret com segurança
+        env:
+          API_TOKEN: ${{ secrets.API_TOKEN }}
+        run: |
+          if [ -z "$API_TOKEN" ]; then
+            echo "Nenhum secret API_TOKEN configurado neste repositório."
+            echo "Crie um em Settings > Secrets and variables > Actions."
+            exit 0
+          fi
+          echo "Comprimento do token: ${#API_TOKEN} caracteres"
+          echo "Tentando imprimir o valor: $API_TOKEN"
+          echo "Repare acima: o GitHub substituiu o valor por ***"

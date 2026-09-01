@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from cotacao.flags import ativa
+
 
 def formatar_brl(valor: float) -> str:
     """Formata um número no padrão monetário brasileiro.
@@ -29,8 +31,15 @@ def formatar_variacao(pct: float) -> str:
 
 
 def resumir(cotacao: dict) -> str:
-    """Monta uma linha legível a partir do dicionário de cotação."""
-    return (
+    """Monta uma linha legível a partir do dicionário de cotação.
+
+    Quando a flag COTACAO_MOSTRAR_COMPRA está ligada, inclui também o
+    preço de compra. O código vai para produção com a flag desligada.
+    """
+    linha = (
         f"{cotacao['par']}: {formatar_brl(cotacao['venda'])} "
         f"({formatar_variacao(cotacao['variacao'])})"
     )
+    if ativa("COTACAO_MOSTRAR_COMPRA"):
+        linha += f" | compra {formatar_brl(cotacao['compra'])}"
+    return linha
