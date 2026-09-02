@@ -1,6 +1,10 @@
 -r requirements.txt
 ruff==0.14.2
 bandit[sarif]==1.9.2
-pip-audit==2.9.0
+# pip-audit precisa ser >= 2.10 para conviver com o cyclonedx-bom no Python
+# 3.14: versões anteriores limitam cyclonedx-python-lib a <10, que exige
+# lxml<6 — e lxml<6 não publica wheel para 3.14, forçando build a partir do
+# fonte (que falha sem libxml2-dev no runner).
+pip-audit==2.10.1
 build==1.3.0
 cyclonedx-bom==7.3.1

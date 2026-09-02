@@ -212,6 +212,12 @@ Hooks do pre-commit: `gitleaks` v8.30.1, `pre-commit-hooks` v6.0.0 e
 Python 3.14 e `requests` 2.34.2. Essas versões mudam com frequência — a fonte a
 consultar é a página de *releases* de cada action.
 
+> **Nota de compatibilidade.** O `pip-audit` precisa ser >= 2.10. Versões
+> anteriores limitam `cyclonedx-python-lib` a `<10`, e essas exigem `lxml<6`,
+> que não publica wheel para Python 3.14 — o runner tentaria compilar do fonte
+> e falharia por falta de `libxml2-dev`. É um bom exemplo, aliás, de por que a
+> matriz de versões existe: o problema só aparecia na perna 3.14.
+
 ## Para conduzir a aula
 
 Veja [DEMO.md](DEMO.md) com o passo a passo da demonstração ao vivo.

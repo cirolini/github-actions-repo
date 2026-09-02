@@ -146,8 +146,11 @@ jobs:
         continue-on-error: true
         run: bandit -r src -f sarif -o bandit.sarif
 
+      # always() sozinho não basta: se um step anterior falhar, o Bandit não
+      # chega a gerar o arquivo e o upload quebraria com "Path does not exist".
+      # hashFiles devolve string vazia quando não há arquivo.
       - name: Publicar achados do Bandit
-        if: always()
+        if: always() && hashFiles('bandit.sarif') != ''
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: bandit.sarif
