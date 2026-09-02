@@ -36,9 +36,7 @@ class TestResumirComFlag(unittest.TestCase):
 
     def test_com_flag_mostra_compra(self):
         with patch.dict("os.environ", {"COTACAO_MOSTRAR_COMPRA": "true"}):
-            self.assertEqual(
-                resumir(COTACAO), "USD-BRL: R$ 5,42 (-0,42%) | compra R$ 5,40"
-            )
+            self.assertEqual(resumir(COTACAO), "USD-BRL: R$ 5,42 (-0,42%) | compra R$ 5,40")
 
 
 if __name__ == "__main__":
