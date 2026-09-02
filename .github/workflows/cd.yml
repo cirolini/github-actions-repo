@@ -43,7 +43,33 @@ jobs:
       - name: Construir o pacote
         run: python -m build
 
-      - name: Publicar artefato
+      # SBOM — a lista de ingredientes do software.
+      #
+      # Instalamos as dependências de execução em um ambiente limpo e
+      # inventariamos esse ambiente. O resultado é o ponto que o slide 19
+      # defende: requirements.txt tem UMA linha, e o SBOM lista cinco
+      # componentes. As outras quatro vieram junto, ninguém as escolheu,
+      # e são tão suas quanto o código que você escreveu.
+      #
+      # É esse arquivo que responde "estamos afetados?" em segundos quando
+      # sai uma CVE — em vez de dias de busca repositório por repositório.
+      - name: Gerar SBOM (CycloneDX)
+        run: |
+          # Ambiente limpo com as dependências de EXECUÇÃO (não as de
+          # desenvolvimento): é isso que vai para produção.
+          python -m venv .runtime
+          ./.runtime/bin/pip install --quiet -r requirements.txt
+          ./.runtime/bin/pip freeze > runtime-frozen.txt
+          cyclonedx-py requirements runtime-frozen.txt \
+            --of JSON --sv 1.6 -o dist/sbom.cdx.json
+          echo "requirements.txt declara:"
+          sed 's/^/  /' requirements.txt
+          echo "O SBOM lista:"
+          python -c "import json;d=json.load(open('dist/sbom.cdx.json'));[print('  -',c['name'],c.get('version')) for c in sorted(d['components'],key=lambda x:x['name'])]"
+
+      # O SBOM viaja junto com o pacote. Artefato e inventário são a mesma
+      # entrega: saber o que foi publicado faz parte de publicar.
+      - name: Publicar artefato e SBOM
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pacote-cotacao
@@ -95,3 +121,9 @@ jobs:
           ls -lh dist/
           sha256sum dist/*.whl
           echo "Deploy concluído."
+
+      # Vai para produção sabendo exatamente o que está sendo publicado.
+      - name: Inventário do que foi publicado
+        run: |
+          echo "Componentes de terceiros nesta versão:"
+          python -c "import json;d=json.load(open('dist/sbom.cdx.json'));[print(' -',c['name'],c.get('version')) for c in sorted(d['components'],key=lambda x:x['name'])]"

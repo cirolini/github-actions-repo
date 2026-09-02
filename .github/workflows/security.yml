@@ -1,5 +1,17 @@
-# Workflow 2 de 3 — SEGURANÇA (prévia do Módulo 3, DevSecOps)
+# Workflow 2 de 3 — SEGURANÇA (Módulo 3, DevSecOps)
 # Separado da CI de propósito: objetivos diferentes, arquivos diferentes.
+#
+# Este arquivo é o mesmo workflow do slide 22 da aula, com os comentários
+# que não cabem em um slide. Três camadas, três jobs, rodando em paralelo
+# porque são independentes entre si:
+#
+#   secrets      -> credenciais que vazaram para o repositório
+#   dependencias -> vulnerabilidades no que instalamos (SCA)
+#   codigo       -> padrões inseguros no que escrevemos (SAST)
+#
+# O que amarra tudo é a permissão security-events: write. Sem ela, cada
+# achado morreria no log da execução. Com ela, vira item rastreável na aba
+# Security, com dono, severidade e histórico.
 name: Segurança
 
 on:
@@ -12,12 +24,86 @@ on:
   schedule:
     - cron: "0 6 * * 1"
 
+# Menor privilégio: leitura do repositório por padrão, escrita apenas
+# no que este workflow precisa publicar.
 permissions:
   contents: read
+  security-events: write
 
 jobs:
-  analise:
-    name: SAST e dependências
+  # ------------------------------------------------------------------
+  # CAMADA 1 — SEGREDOS
+  # ------------------------------------------------------------------
+  secrets:
+    name: Segredos (Gitleaks)
+    runs-on: ubuntu-latest
+
+    steps:
+      # fetch-depth: 0 traz o histórico completo. Sem isso o runner faz
+      # um clone raso e o Gitleaks varreria apenas o último commit — mas
+      # segredo commitado por engano fica no histórico para sempre, mesmo
+      # depois de removido do arquivo. É o histórico que precisa ser varrido.
+      - name: Checkout com histórico completo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Esta é a camada de DETECÇÃO. A de PREVENÇÃO está no
+      # .pre-commit-config.yaml, que roda o mesmo Gitleaks antes do commit.
+      # As duas são necessárias: o hook local pode ser burlado com
+      # `git commit --no-verify`, e a esteira não pode.
+      - name: Varrer histórico em busca de segredos
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Em conta de organização, o Gitleaks exige GITLEAKS_LICENSE
+          # (gratuita, em gitleaks.io). Em conta pessoal, como esta, não.
+
+  # ------------------------------------------------------------------
+  # CAMADA 2 — DEPENDÊNCIAS (SCA)
+  # ------------------------------------------------------------------
+  dependencias:
+    name: Dependências (SCA)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # A dependency-review-action compara as dependências ANTES e DEPOIS
+      # da mudança, então só existe em evento de pull request. Repare que o
+      # `if` está no step, e não no job: assim o pip-audit abaixo continua
+      # rodando no push e, principalmente, na execução agendada de segunda.
+      - name: Revisão de dependências (apenas em pull request)
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          # Valores aceitos: low, moderate, high, critical.
+          # Começamos bloqueando só o crítico, como ensina o slide 26.
+          fail-on-severity: critical
+
+      - name: Configurar Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Instalar ferramentas
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      # Complementar à revisão acima: roda em todo evento, inclusive no
+      # agendamento semanal. É este step que pega a CVE publicada depois
+      # do último commit — o caso do slide 19.
+      - name: Auditar dependências (pip-audit)
+        run: pip-audit -r requirements.txt --strict
+
+  # ------------------------------------------------------------------
+  # CAMADA 3 — CÓDIGO (SAST)
+  # ------------------------------------------------------------------
+  codigo:
+    name: Código (SAST)
     runs-on: ubuntu-latest
 
     steps:
@@ -30,15 +116,39 @@ jobs:
           python-version: "3.14"
           cache: pip
 
-      - name: Instalar ferramentas de segurança
+      - name: Instalar ferramentas
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
-      # SAST: procura padrões inseguros no nosso próprio código.
-      - name: Analisar código (Bandit)
-        run: bandit -r src -f screen
+      # O CodeQL tem dois passos obrigatórios: init prepara a base de dados
+      # e analyze roda as consultas. Só o analyze não funciona.
+      #
+      # Repare que o CodeQL é a ÚNICA action deste repositório fixada por
+      # tag e não por SHA. Não é descuido: a própria documentação do GitHub
+      # recomenda a tag de major, porque parte das funcionalidades depende
+      # de flags do lado do servidor e uma versão antiga presa por SHA vai
+      # perdendo capacidade em silêncio. É a exceção que confirma a regra.
+      - name: Inicializar CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: python
 
-      # SCA: compara as dependências com bases de vulnerabilidades conhecidas.
-      - name: Auditar dependências (pip-audit)
-        run: pip-audit -r requirements.txt --strict
+      - name: Analisar com CodeQL
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:python"
+
+      # Segundo SAST, específico de Python. O ponto didático está no formato:
+      # ferramentas diferentes falam SARIF, então publicam os achados no
+      # mesmo lugar. Uma aba Security, várias fontes.
+      - name: Analisar com Bandit
+        continue-on-error: true
+        run: bandit -r src -f sarif -o bandit.sarif
+
+      - name: Publicar achados do Bandit
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: bandit.sarif
+          category: bandit

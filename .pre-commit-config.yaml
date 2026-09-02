@@ -1,0 +1,56 @@
+# Camada de PREVENÇÃO — roda na máquina de quem desenvolve, antes do commit.
+#
+# O workflow de segurança (.github/workflows/security.yml) é a camada de
+# DETECÇÃO: roda depois, na esteira, e varre o histórico inteiro.
+#
+# As duas são necessárias e não se substituem:
+#
+#   - o hook local é mais rápido e mais barato: o segredo nem chega a existir
+#     em um commit. Mas pode ser burlado com `git commit --no-verify`, e só
+#     protege quem instalou o hook;
+#   - a esteira não pode ser burlada e vale para todo mundo. Mas só age depois
+#     que o segredo já entrou no histórico — e aí a credencial precisa ser
+#     rotacionada, não basta apagar o arquivo.
+#
+# Instalação (uma vez por clone):
+#   pip install pre-commit
+#   pre-commit install
+#
+# Para rodar em todos os arquivos sem esperar um commit:
+#   pre-commit run --all-files
+
+repos:
+  # ------------------------------------------------------------------
+  # Segredos — a verificação de maior retorno e menor atrito
+  # ------------------------------------------------------------------
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  # ------------------------------------------------------------------
+  # Higiene básica de arquivos
+  # ------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-yaml
+      - id: check-merge-conflict
+      # Bloqueia commit acidental de chave privada.
+      - id: detect-private-key
+      # Arquivo grande demais costuma ser artefato ou dump que não deveria
+      # estar no repositório.
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+
+  # ------------------------------------------------------------------
+  # Mesmo lint e formatação que a CI roda — descobrir aqui é mais barato
+  # ------------------------------------------------------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.2
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+      - id: ruff-format
